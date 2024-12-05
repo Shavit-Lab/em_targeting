@@ -5,6 +5,7 @@ import numpy as np
 import argparse
 from pathlib import Path
 from skimage import measure
+import os
 
 def main():
     parser = argparse.ArgumentParser(
@@ -21,13 +22,25 @@ def main():
     path_im = args.path_im
     nrtiles = args.nrtiles
 
+    path_im = Path(path_im)
+
     image = read_image(path_im)
     mask = get_mask(image, nrtiles)
 
-    path_im = Path(path_im)
-    path_mask = path_im.parent / f"{path_im.stem}_mask.tif"
+    mask_dir = path_im.parent / "masks"
+    path_mask = mask_dir / f"{path_im.stem}_mask.tif"
+    if not os.path.exists(mask_dir):
+        os.makedirs(mask_dir)
+
     Image.fromarray(mask).save(path_mask)
-    print(path_mask)
+
+    overview_dir = path_im.parent / "overviews"
+    path_overview = overview_dir / f"{path_im.stem}_overview.tif"
+    if not os.path.exists(overview_dir):
+        os.makedirs(overview_dir)
+    path_im.rename(path_overview)
+
+    print(f"Saving {path_mask}, {path_overview}")
 
 def read_image(path_im):
     image = Image.open(path_im)
