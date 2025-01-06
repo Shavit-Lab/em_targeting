@@ -3,3 +3,4 @@ SEMNavigator.cfg
 logfile.txt
 .DS_Store
 *.egg-info/
+__pycache__/
