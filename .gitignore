@@ -1,3 +1,5 @@
 /images
 SEMNavigator.cfg
 logfile.txt
+.DS_Store
+*.egg-info/
