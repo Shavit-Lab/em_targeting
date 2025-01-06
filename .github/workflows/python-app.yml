@@ -31,7 +31,7 @@ jobs:
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
     - name: Test with pytest
       run: |
-        pytest --cov=./ --cov-report=xml cell_paint_seg/
+        pytest --cov=./ --cov-report=xml em_targeting/
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v4
       with:
