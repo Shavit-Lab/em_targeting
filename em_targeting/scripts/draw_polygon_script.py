@@ -53,7 +53,7 @@ def get_mask(image, nrtiles):
 
     # add grid lines
     image_shape = image.shape
-    grid_spacing = image_shape[0] // nrtiles
+    grid_spacing = int(np.ceil(image_shape[0] / nrtiles))
 
     horizontal_lines = [
         [[y, 0], [y, image_shape[1]]] for y in range(0, image_shape[0], grid_spacing)
@@ -65,11 +65,13 @@ def get_mask(image, nrtiles):
 
     grid_lines = horizontal_lines + vertical_lines
 
+    edge_width = np.amax([image_shape[0] // 500, 1])
+
     viewer.add_shapes(
         grid_lines,
         shape_type="line",
         edge_color="red",
-        edge_width=image_shape[0] // 500,
+        edge_width=edge_width,
         name="Grid Lines",
     )
 
@@ -85,6 +87,8 @@ def get_mask(image, nrtiles):
         mask += np.array(img).T
     mask = mask > 0
 
+    print(mask.shape)
+    print(grid_spacing)
     mask_ds = measure.block_reduce(mask, block_size=grid_spacing, func=np.max)
     mask = np.repeat(mask_ds, grid_spacing, axis=0)
     mask = np.repeat(mask, grid_spacing, axis=1)
@@ -93,6 +97,8 @@ def get_mask(image, nrtiles):
     viewer.add_image(image, interpolation2d="linear")
     viewer.add_labels(mask)
     napari.run()
+
+    print(mask_ds.shape)
 
     return mask_ds
 
