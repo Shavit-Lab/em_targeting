@@ -14,11 +14,17 @@ def test_polygons_to_mask():
 # write a test that checks that the make_gridlines function returns the correct gridlines
 def test_make_gridlines():
     image_shape = (100, 100)
-    nrtiles = 10
-    grid_lines, grid_spacing = draw_polygon.make_gridlines(image_shape, nrtiles)
+    grid_lines, grid_spacing = draw_polygon.make_gridlines(image_shape, 10, 10)
     assert len(grid_lines) == 20
     assert grid_spacing == 10
 
+    grid_lines, grid_spacing = draw_polygon.make_gridlines(image_shape, 10, 5)
+    assert len(grid_lines) == 20
+    assert grid_spacing == 10
+
+    grid_lines, grid_spacing = draw_polygon.make_gridlines(image_shape, 5, 10)
+    assert len(grid_lines) == 20
+    assert grid_spacing == 10
 
 # write a test that checks that the discretize_mask function returns the correct mask
 def test_discretize_mask():

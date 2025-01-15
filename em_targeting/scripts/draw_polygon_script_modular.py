@@ -15,12 +15,14 @@ from em_targeting.draw_polygon import (
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Perform spline selection of ROI")
+    parser = argparse.ArgumentParser(description="Perform spline selection of ROI. Assumes the overview image is the minimum size square that contains the mosaic of square tiles.")
     parser.add_argument("--path_im", type=str, help="Image Path")
-    parser.add_argument("--nrtiles", type=int, help="Number of tiles")
+    parser.add_argument("--nrtilesx", type=int, help="Number of tiles in x")
+    parser.add_argument("--nrtilesy", type=int, help="Number of tiles in y")
     args = parser.parse_args()
     path_im = args.path_im
-    nrtiles = args.nrtiles
+    nrtilesx = args.nrtilesx
+    nrtilesy = args.nrtilesy
 
     path_im = Path(path_im)
 
@@ -33,7 +35,7 @@ def main():
 
     # Get the grid
     image = read_image(path_im)
-    mask = get_mask(image, nrtiles)
+    mask = get_mask(image, nrtilesx, nrtilesy)
 
     # Save the mask and overview
     Image.fromarray(mask).save(path_mask)
@@ -42,7 +44,7 @@ def main():
     print(f"Saving {path_mask}, {path_overview}")
 
 
-def get_mask(image, nrtiles):
+def get_mask(image, nrtilesx, nrtilesy):
     viewer = napari.Viewer()
 
     # Add image
@@ -53,7 +55,7 @@ def get_mask(image, nrtiles):
 
     # Make grid lines
     image_shape = image.shape
-    grid_lines, grid_spacing = make_gridlines(image_shape, nrtiles)
+    grid_lines, grid_spacing = make_gridlines(image_shape, nrtilesx, nrtilesy)
     edge_width = np.amax([image_shape[0] // 500, 1])
 
     # Add grid lines and shapes layer
