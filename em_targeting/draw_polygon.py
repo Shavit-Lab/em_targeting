@@ -26,6 +26,7 @@ def polygons_to_mask(layer_data, image_shape):
         ImageDraw.Draw(img).polygon(polygon, outline=1, fill=1)
         mask += np.array(img).T
     mask = mask > 0
+
     return mask
 
 
@@ -61,46 +62,115 @@ def display_grid(viewer, image, nrtiles):
     return viewer
 
 
-def make_gridlines(image_shape, nrtiles):
-    """Make gridlines for an image
+def make_gridlines(image_shape, nrtilesh, nrtilesv):
+    """Make gridlines for an image. Assumes overview image is the smallest square that contains the mosaic of square tiles.
 
     Args:
         image_shape (tuple): Shape of the image
-        nrtiles (int): Number of tiles along each dimension
+        nrtilesh (int): Number of tiles along horizontal dimension
+        nrtilesv (int): Number of tiles along vertical dimension
 
     Returns:
         list: List of gridlines, for use in napari
         int: Grid spacing
     """
-    grid_spacing = int(np.ceil(image_shape[0] / nrtiles))
+    assert image_shape[0] == image_shape[1], "Overview image must be square"
+
+    grid_spacing, bbox = _ntiles_to_spacing(nrtilesh, nrtilesv, image_shape)
+    hmin, hmax, vmin, vmax = bbox
 
     horizontal_lines = [
-        [[y, 0], [y, image_shape[1]]] for y in range(0, image_shape[0], grid_spacing)
+        [[v, hmin], [v, hmax]] for v in np.arange(vmin, vmax, grid_spacing)
     ]
+    if len(horizontal_lines) < nrtilesv + 1:
+        horizontal_lines += [[[vmax, hmin], [vmax, hmax]]]
 
     vertical_lines = [
-        [[0, x], [image_shape[1], x]] for x in range(0, image_shape[1], grid_spacing)
+        [[vmin, h], [vmax, h]] for h in np.arange(hmin, hmax, grid_spacing)
     ]
+    if len(vertical_lines) < nrtilesh + 1:
+        vertical_lines += [[[vmin, hmax], [vmax, hmax]]]
 
     grid_lines = horizontal_lines + vertical_lines
 
-    return grid_lines, grid_spacing
+    return grid_lines
 
 
-def discretize_mask(mask, grid_spacing):
+def _ntiles_to_spacing(nrtilesh, nrtilesv, image_shape):
+    """Given an image shape and number of tiles, calculate the grid spacing and bounding box. Returned values may not be integers.
+
+    Args:
+        nrtilesh (int): number of tiles along horizontal dimension
+        nrtilesv (int): number of tiles along vertical dimension
+        image_shape (tuple): shape of the image
+
+    Returns:
+        float: width of a tile in pixels
+        tuple: bounding box of the gridlines
+    """
+    assert image_shape[0] == image_shape[1], "Overview image must be square"
+
+    if nrtilesh >= nrtilesv:
+        grid_spacing = image_shape[1] / nrtilesh
+        hmin = 0
+        hmax = image_shape[1]
+
+        height = grid_spacing * nrtilesv
+        vmin = (image_shape[0] - height) / 2
+        vmax = vmin + height
+    else:
+        grid_spacing = image_shape[0] / nrtilesv
+        vmin = 0
+        vmax = image_shape[0]
+
+        width = grid_spacing * nrtilesh
+        hmin = (image_shape[1] - width) / 2
+        hmax = hmin + width
+
+    bbox = (hmin, hmax, vmin, vmax)
+    return grid_spacing, bbox
+
+
+def discretize_mask(mask, nrtilesh, nrtilesv):
     """Discritize a mask using a max pooling operation
 
     Args:
         mask (np.array): Binary mask
-        grid_spacing (int): Number of pixels to pool over
+        nrtilesh (int): Number of tiles along horizontal dimension
+        nrtilesv (int): Number of tiles along vertical dimension
 
     Returns:
         np.array: Mask after discretization with same shape as input
         np.array: Mask after discretization with shape reduced by grid_spacing
     """
+    image_shape = mask.shape
+    grid_spacing, bbox = _ntiles_to_spacing(nrtilesh, nrtilesv, image_shape)
+    hmin, hmax, vmin, vmax = bbox
+    hmin, hmax, vmin, vmax = int(hmin), int(hmax), int(vmin), int(vmax)
+    grid_spacing = int(np.ceil(grid_spacing))
+
+    mask = mask[vmin:vmax, hmin:hmax]
+
     mask_ds = measure.block_reduce(mask, block_size=grid_spacing, func=np.max)
+
     mask = np.repeat(mask_ds, grid_spacing, axis=0)
     mask = np.repeat(mask, grid_spacing, axis=1)
+
+    if mask.shape[0] > image_shape[0]:
+        mask = mask[: image_shape[0], :]
+    elif mask.shape[0] < image_shape[0]:
+        pad_wd = (image_shape[0] - mask.shape[0]) // 2
+        mask = np.pad(mask, ((0, pad_wd), (0, 0)), mode="constant")
+        pad_wd = image_shape[0] - mask.shape[0]
+        mask = np.pad(mask, ((pad_wd, 0), (0, 0)), mode="constant")
+
+    if mask.shape[1] > image_shape[1]:
+        mask = mask[:, : image_shape[1]]
+    elif mask.shape[1] < image_shape[1]:
+        pad_wd = (image_shape[1] - mask.shape[1]) // 2
+        mask = np.pad(mask, ((0, 0), (0, pad_wd)), mode="constant")
+        pad_wd = image_shape[1] - mask.shape[1]
+        mask = np.pad(mask, ((0, 0), (pad_wd, 0)), mode="constant")
 
     return mask, mask_ds
 
