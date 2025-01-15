@@ -13,26 +13,27 @@ def main():
     parser.add_argument("--path_im", type=str, help="Image Path")
     parser.add_argument("--nrtiles", type=int, help="Number of tiles")
     args = parser.parse_args()
-
     path_im = args.path_im
     nrtiles = args.nrtiles
 
     path_im = Path(path_im)
 
+    # Make various paths
+    mask_dir = path_im.parent / "masks"
+    overview_dir = path_im.parent / "overviews"
+    if not os.path.exists(mask_dir):
+        os.makedirs(mask_dir)
+    if not os.path.exists(overview_dir):
+        os.makedirs(overview_dir)
+    path_mask = mask_dir / f"{path_im.stem}_mask.tif"
+    path_overview = overview_dir / f"{path_im.stem}_overview.tif"
+
+    # Get the grid
     image = read_image(path_im)
     mask = get_mask(image, nrtiles)
 
-    mask_dir = path_im.parent / "masks"
-    path_mask = mask_dir / f"{path_im.stem}_mask.tif"
-    if not os.path.exists(mask_dir):
-        os.makedirs(mask_dir)
-
+    # Save the mask and overview
     Image.fromarray(mask).save(path_mask)
-
-    overview_dir = path_im.parent / "overviews"
-    path_overview = overview_dir / f"{path_im.stem}_overview.tif"
-    if not os.path.exists(overview_dir):
-        os.makedirs(overview_dir)
     path_im.rename(path_overview)
 
     print(f"Saving {path_mask}, {path_overview}")
