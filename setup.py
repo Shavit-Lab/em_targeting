@@ -14,6 +14,8 @@ setup(
         "pandas",
         "Pillow",
         "scikit-image",
+        "h5py",
+        "matplotlib",
     ],
     license="MIT",
 )

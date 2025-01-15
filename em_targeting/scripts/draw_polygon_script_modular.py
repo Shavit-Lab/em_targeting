@@ -6,8 +6,10 @@ from pathlib import Path
 from em_targeting.image_io import read_image
 from em_targeting.utils import (
     make_dirs,
+)
+from em_targeting.draw_polygon import (
     make_gridlines,
-    polygon_to_mask,
+    polygons_to_mask,
     discretize_mask,
 )
 
@@ -49,26 +51,24 @@ def get_mask(image, nrtiles):
     )
     # viewer.add_image(image, interpolation2d='linear')
 
-    # Add grid lines
+    # Make grid lines
     image_shape = image.shape
     grid_lines, grid_spacing = make_gridlines(image_shape, nrtiles)
+    edge_width = np.amax([image_shape[0] // 500, 1])
+
+    # Add grid lines and shapes layer
     viewer.add_shapes(
         grid_lines,
         shape_type="line",
         edge_color="red",
-        edge_width=image_shape[0] // 500,
+        edge_width=edge_width,
         name="Grid Lines",
     )
-
-    # Add shapes layer for selection
     viewer.add_shapes(name="tissue")
     napari.run()
 
     # Aggregate the polygons into a mask
-    mask = np.zeros(image_shape[:2], dtype=int)
-    for polygon in viewer.layers["tissue"].data:
-        mask += polygon_to_mask(polygon, image_shape)
-    mask = mask > 0
+    mask = polygons_to_mask(viewer.layers["tissue"].data, image_shape)
 
     # Discretize the mask
     mask, mask_ds = discretize_mask(mask, grid_spacing)
