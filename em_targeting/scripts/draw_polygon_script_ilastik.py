@@ -18,9 +18,13 @@ from em_targeting.mask_processing import (
 )
 from em_targeting.apply_ilastik import apply_ilastik
 
+# ilastik_models = {
+#     "bell": "/Users/thomasathey/Library/CloudStorage/OneDrive-MassachusettsInstituteofTechnology/jellyfish-imaging/24_12_04_multi_res/images/overview_bell_123.ilp",
+#     "tentacle": "/Users/thomasathey/Library/CloudStorage/OneDrive-MassachusettsInstituteofTechnology/jellyfish-imaging/24_12_04_multi_res/images/overview_tentacle_123.ilp",
+# }
 ilastik_models = {
-    "bell": "/Users/thomasathey/Library/CloudStorage/OneDrive-MassachusettsInstituteofTechnology/jellyfish-imaging/24_12_04_multi_res/images/overview_bell_123.ilp",
-    "tentacle": "/Users/thomasathey/Library/CloudStorage/OneDrive-MassachusettsInstituteofTechnology/jellyfish-imaging/24_12_04_multi_res/images/overview_tentacle_123.ilp",
+    "bell": "/Users/thomasathey/Library/CloudStorage/OneDrive-MassachusettsInstituteofTechnology/jellyfish-imaging/25_01_22_ilastik_section/section_from_wafer.ilp",
+    "tentacle": "/Users/thomasathey/Library/CloudStorage/OneDrive-MassachusettsInstituteofTechnology/jellyfish-imaging/25_01_22_ilastik_section/section_from_wafer.ilp",
 }
 
 
@@ -47,6 +51,7 @@ def main():
 
     # Get the grid
     image = read_image(path_im)
+
     init_mask = get_ilastik_mask(path_im)
     mask = get_mask(image, nrtilesh, nrtilesv, init_mask=init_mask)
 

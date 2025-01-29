@@ -5,6 +5,7 @@ import numpy as np
 import argparse
 from pathlib import Path
 from skimage import measure
+from scipy.interpolate import RegularGridInterpolator
 import os
 import h5py
 
@@ -63,10 +64,13 @@ def display_grid(viewer, image, nrtiles):
 
 
 def make_gridlines(image_shape, nrtilesh, nrtilesv):
-    """Make gridlines for an image. Assumes overview image is the smallest square that contains the mosaic of square tiles.
+    """Make gridlines for an image. Assumptions:
+    - Image is square
+    - Gridlines are equally spaced
+    - Image is smallest bounding square for the gridlines
 
     Args:
-        image_shape (tuple): Shape of the image
+        image_shape (tuple): Shape of the image. Must be square/
         nrtilesh (int): Number of tiles along horizontal dimension
         nrtilesv (int): Number of tiles along vertical dimension
 
@@ -97,7 +101,11 @@ def make_gridlines(image_shape, nrtilesh, nrtilesv):
 
 
 def _ntiles_to_spacing(nrtilesh, nrtilesv, image_shape):
-    """Given an image shape and number of tiles, calculate the grid spacing and bounding box. Returned values may not be integers.
+    """Given an image shape and number of tiles, calculate the grid spacing and bounding box.
+        Note that returned value may not be a whole number. Assumptions:
+        - Image is square
+        - Gridlines are equally spaced
+        - Image is smallest bounding square for the gridlines
 
     Args:
         nrtilesh (int): number of tiles along horizontal dimension
@@ -145,32 +153,71 @@ def discretize_mask(mask, nrtilesh, nrtilesv):
     """
     image_shape = mask.shape
     grid_spacing, bbox = _ntiles_to_spacing(nrtilesh, nrtilesv, image_shape)
+    grid_spacing_ceil = int(np.ceil(grid_spacing))
     hmin, hmax, vmin, vmax = bbox
-    hmin, hmax, vmin, vmax = int(hmin), int(hmax), int(vmin), int(vmax)
-    grid_spacing = int(np.ceil(grid_spacing))
 
-    mask = mask[vmin:vmax, hmin:hmax]
+    # interp so there are grid_spacing_ceil points per tile
+    interp = RegularGridInterpolator(
+        (np.arange(image_shape[0]), np.arange(image_shape[1])),
+        mask,
+        method="nearest",
+        bounds_error=False,
+        fill_value=None,
+    )
 
-    mask_ds = measure.block_reduce(mask, block_size=grid_spacing, func=np.max)
+    spacing = grid_spacing / grid_spacing_ceil
 
-    mask = np.repeat(mask_ds, grid_spacing, axis=0)
-    mask = np.repeat(mask, grid_spacing, axis=1)
+    v_sample = np.arange(vmin, vmax, spacing)
+    if len(v_sample) % grid_spacing_ceil != 0:
+        v_sample = v_sample[:-1]
 
-    if mask.shape[0] > image_shape[0]:
-        mask = mask[: image_shape[0], :]
-    elif mask.shape[0] < image_shape[0]:
-        pad_wd = (image_shape[0] - mask.shape[0]) // 2
-        mask = np.pad(mask, ((0, pad_wd), (0, 0)), mode="constant")
-        pad_wd = image_shape[0] - mask.shape[0]
-        mask = np.pad(mask, ((pad_wd, 0), (0, 0)), mode="constant")
+    h_sample = np.arange(hmin, hmax, spacing)
+    if len(h_sample) % grid_spacing_ceil != 0:
+        h_sample = h_sample[:-1]
 
-    if mask.shape[1] > image_shape[1]:
-        mask = mask[:, : image_shape[1]]
-    elif mask.shape[1] < image_shape[1]:
-        pad_wd = (image_shape[1] - mask.shape[1]) // 2
-        mask = np.pad(mask, ((0, 0), (0, pad_wd)), mode="constant")
-        pad_wd = image_shape[1] - mask.shape[1]
-        mask = np.pad(mask, ((0, 0), (pad_wd, 0)), mode="constant")
+    v, h = np.meshgrid(v_sample, h_sample, indexing="ij")
+    mask_interp = interp((v, h))
+
+    assert mask_interp.shape == (
+        grid_spacing_ceil * nrtilesv,
+        grid_spacing_ceil * nrtilesh,
+    )
+
+    # downsample
+    mask_ds = measure.block_reduce(
+        mask_interp, block_size=grid_spacing_ceil, func=np.max
+    )
+
+    assert mask_ds.shape == (nrtilesv, nrtilesh)
+
+    # resample to original size
+    v_sample = np.arange(vmin, vmax, grid_spacing)
+    if len(v_sample) % nrtilesv != 0:
+        v_sample = v_sample[:-1]
+    h_sample = np.arange(hmin, hmax, grid_spacing)
+    if len(h_sample) % nrtilesh != 0:
+        h_sample = h_sample[:-1]
+
+    interp_inv = RegularGridInterpolator(
+        (v_sample, h_sample),
+        mask_ds,
+        method="nearest",
+        fill_value=None,
+        bounds_error=False,
+    )
+
+    v_sample = np.arange(image_shape[0])
+    h_sample = np.arange(image_shape[1])
+    v, h = np.meshgrid(v_sample, h_sample, indexing="ij")
+    mask = interp_inv((v, h))
+
+    # mask the edges
+    mask[:, : int(np.round(hmin))] = 0
+    mask[:, int(np.round(hmax)) :] = 0
+    mask[: int(np.round(vmin)), :] = 0
+    mask[int(np.round(vmax)) :, :] = 0
+
+    mask = mask > 0
 
     return mask, mask_ds
 
