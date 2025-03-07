@@ -167,15 +167,15 @@ def discretize_mask(mask, nrtilesh, nrtilesv):
 
     spacing = grid_spacing / grid_spacing_ceil
 
-    v_sample = np.arange(vmin, vmax, spacing)
-    if len(v_sample) % grid_spacing_ceil != 0:
-        v_sample = v_sample[:-1]
+    v_upsample = np.arange(vmin, vmax, spacing)
+    if len(v_upsample) % grid_spacing_ceil == 1:
+        v_upsample = v_upsample[:-1]
 
-    h_sample = np.arange(hmin, hmax, spacing)
-    if len(h_sample) % grid_spacing_ceil != 0:
-        h_sample = h_sample[:-1]
+    h_upsample = np.arange(hmin, hmax, spacing)
+    if len(h_upsample) % grid_spacing_ceil == 1:
+        h_upsample = h_upsample[:-1]
 
-    v, h = np.meshgrid(v_sample, h_sample, indexing="ij")
+    v, h = np.meshgrid(v_upsample, h_upsample, indexing="ij")
     mask_interp = interp((v, h))
 
     assert mask_interp.shape == (
@@ -190,25 +190,25 @@ def discretize_mask(mask, nrtilesh, nrtilesv):
 
     assert mask_ds.shape == (nrtilesv, nrtilesh)
 
-    # resample to original size
-    v_sample = np.arange(vmin, vmax, grid_spacing)
-    if len(v_sample) % nrtilesv != 0:
-        v_sample = v_sample[:-1]
-    h_sample = np.arange(hmin, hmax, grid_spacing)
-    if len(h_sample) % nrtilesh != 0:
-        h_sample = h_sample[:-1]
+    # # resample to original size
+    v_downsample = np.arange(vmin, vmax, grid_spacing) + grid_spacing / 2
+    if len(v_downsample) % nrtilesv == 1:
+        v_downsample = v_downsample[:-1]
+    h_downsample = np.arange(hmin, hmax, grid_spacing) + grid_spacing / 2
+    if len(h_downsample) % nrtilesh == 1:
+        h_downsample = h_downsample[:-1]
 
     interp_inv = RegularGridInterpolator(
-        (v_sample, h_sample),
+        (v_downsample, h_downsample),
         mask_ds,
         method="nearest",
         fill_value=None,
         bounds_error=False,
     )
 
-    v_sample = np.arange(image_shape[0])
-    h_sample = np.arange(image_shape[1])
-    v, h = np.meshgrid(v_sample, h_sample, indexing="ij")
+    v_sample_og = np.arange(image_shape[0])
+    h_sample_og = np.arange(image_shape[1])
+    v, h = np.meshgrid(v_sample_og, h_sample_og, indexing="ij")
     mask = interp_inv((v, h))
 
     # mask the edges

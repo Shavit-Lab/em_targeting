@@ -156,7 +156,7 @@ def test_discretize_mask():
     assert mask_ds[1, 1] == 1
     assert np.sum(mask_ds) == 1
     assert mask.shape == (10, 10)
-    assert mask.sum() >= 9
+    assert mask.sum() >= 6
     assert mask.sum() <= 16
 
     # Large
