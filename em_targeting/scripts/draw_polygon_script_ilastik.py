@@ -6,6 +6,7 @@ from pathlib import Path
 from em_targeting.image_io import read_image
 from em_targeting.utils import (
     make_dirs,
+    convert_to_hdf5
 )
 from em_targeting.draw_polygon import (
     make_gridlines,
@@ -17,15 +18,36 @@ from em_targeting.mask_processing import (
     postprocess_mask_tentacles,
 )
 from em_targeting.apply_ilastik import apply_ilastik
+import time
+from scipy.ndimage import zoom
+from skimage.transform import resize
 
-# ilastik_models = {
-#     "bell": "/Users/thomasathey/Library/CloudStorage/OneDrive-MassachusettsInstituteofTechnology/jellyfish-imaging/24_12_04_multi_res/images/overview_bell_123.ilp",
-#     "tentacle": "/Users/thomasathey/Library/CloudStorage/OneDrive-MassachusettsInstituteofTechnology/jellyfish-imaging/24_12_04_multi_res/images/overview_tentacle_123.ilp",
-# }
+
+
 ilastik_models = {
-    "bell": "/Users/thomasathey/Library/CloudStorage/OneDrive-MassachusettsInstituteofTechnology/jellyfish-imaging/25_01_22_ilastik_section/section_from_wafer.ilp",
-    "tentacle": "/Users/thomasathey/Library/CloudStorage/OneDrive-MassachusettsInstituteofTechnology/jellyfish-imaging/25_01_22_ilastik_section/section_from_wafer.ilp",
+    "bell": "/Users/thomasathey/Library/CloudStorage/OneDrive-MassachusettsInstituteofTechnology/jellyfish-imaging/24_12_04_multi_res/images/overview_bell_123.ilp",
+    "tentacle": "/Users/thomasathey/Library/CloudStorage/OneDrive-MassachusettsInstituteofTechnology/jellyfish-imaging/24_12_04_multi_res/images/overview_tentacle_123.ilp",
 }
+ilastik_models = {
+    "bell": "/Users/thomasathey/Documents/shavit-lab/jellyfish/images/p123_ds_targeting_experiment/p123_ds2_bell.ilp",
+    "tentacle": "/Users/thomasathey/Documents/shavit-lab/jellyfish/images/p123_ds_targeting_experiment/p123_ds2_tentacle.ilp",
+}
+ilastik_models = {
+    "bell": "/Users/thomasathey/Library/CloudStorage/OneDrive-MassachusettsInstituteofTechnology/jellyfish-imaging/25_01_22_ilastik_section/section_from_wafer_gray.ilp",
+    "tentacle": "/Users/thomasathey/Library/CloudStorage/OneDrive-MassachusettsInstituteofTechnology/jellyfish-imaging/25_01_22_ilastik_section/section_from_wafer_gray.ilp",
+}
+zoom_factor = 1
+
+
+def timing_decorator(func):
+    def wrapper(*args, **kwargs):
+        start_time = time.time()  # Start timer
+        result = func(*args, **kwargs)  # Call the actual function
+        end_time = time.time()  # End timer
+        print(f"Function '{func.__name__}' took {end_time - start_time:.6f} seconds to run.")
+        return result  # Return the original function's result
+    return wrapper
+
 
 
 def main():
@@ -35,6 +57,9 @@ def main():
     parser.add_argument("--path_im", type=str, help="Image Path")
     parser.add_argument("--nrtilesh", type=int, help="Number of tiles in x")
     parser.add_argument("--nrtilesv", type=int, help="Number of tiles in y")
+    parser.add_argument('--dontmove', action="store_true", help="don't move the overview image")
+    parser.add_argument('--dontpredict', action="store_true", help="don't run ilastik")
+    
     args = parser.parse_args()
     path_im = args.path_im
     nrtilesh = args.nrtilesh
@@ -52,17 +77,25 @@ def main():
     # Get the grid
     image = read_image(path_im)
 
-    init_mask = get_ilastik_mask(path_im)
+    path_im_hdf5 = path_im.with_suffix(".hdf5")
+    convert_to_hdf5(path_im, path_im_hdf5, zoom_factor = zoom_factor)
+
+    if not args.dontpredict:
+        init_mask = get_ilastik_mask(path_im_hdf5, image.shape)
+    else:
+        init_mask = None
+        
     mask = get_mask(image, nrtilesh, nrtilesv, init_mask=init_mask)
 
     # Save the mask and overview
     Image.fromarray(mask).save(path_mask)
-    path_im.rename(path_overview)
+    if not args.dontmove:
+        path_im.rename(path_overview)
 
     print(f"Saving {path_mask}, {path_overview}")
 
-
-def get_ilastik_mask(path_im):
+@timing_decorator
+def get_ilastik_mask(path_im, final_shape):
     ilastik_path = apply_ilastik(
         ilastik_models["bell"],
         path_im,
@@ -79,15 +112,17 @@ def get_ilastik_mask(path_im):
     )
     seg_pred_tent = read_image(ilastik_path)
 
-    seg_pred_postprocess_bell, _ = postprocess_mask_bell(seg_pred_bell)
-    seg_pred_postprocess_tent, _ = postprocess_mask_tentacles(seg_pred_tent)
+    seg_pred_postprocess_bell, _ = postprocess_mask_bell(seg_pred_bell, major_axis_length=100, min_size=1250)
+    seg_pred_postprocess_tent, _ = postprocess_mask_tentacles(seg_pred_tent, min_size=1250)
     seg_pred_postprocess = np.logical_or(
         seg_pred_postprocess_bell, seg_pred_postprocess_tent
     )
 
+    seg_pred_postprocess = resize(seg_pred_postprocess, final_shape, order=0)
+
     return seg_pred_postprocess
 
-
+@timing_decorator
 def get_mask(image, nrtilesh, nrtilesv, init_mask=None):
     viewer = napari.Viewer()
 
@@ -112,13 +147,20 @@ def get_mask(image, nrtilesh, nrtilesv, init_mask=None):
         edge_width=edge_width,
         name="Grid Lines",
     )
-    viewer.add_shapes(name="tissue")
+    viewer.add_shapes(name="ADD")
+    viewer.add_shapes(name="REMOVE")
     napari.run()
 
     # Aggregate the polygons into a mask
-    mask = polygons_to_mask(viewer.layers["tissue"].data, image_shape)
+    if init_mask is not None:
+        mask = polygons_to_mask(viewer.layers["REMOVE"].data, image_shape)
+        init_mask = np.logical_and(np.logical_not(mask), init_mask)
+
+    mask = polygons_to_mask(viewer.layers["ADD"].data, image_shape)
     if init_mask is not None:
         mask = np.logical_or(mask, init_mask)
+
+    
 
     # Discretize the mask
     mask, mask_ds = discretize_mask(mask, nrtilesh, nrtilesv)
@@ -129,6 +171,7 @@ def get_mask(image, nrtilesh, nrtilesv, init_mask=None):
     viewer = napari.Viewer()
     viewer.add_image(image, interpolation2d="linear")
     viewer.add_labels(mask)
+    #viewer.add_image(mask_ds, scale=(image.shape[0] / mask_ds.shape[0], image.shape[1] / mask_ds.shape[1]))
     napari.run()
 
     return mask_ds

@@ -19,8 +19,6 @@ def apply_ilastik(
 
     image_path = str(image_path)
 
-    # output_format = f
-
     command = [
         ilastik_path,
         "--headless",

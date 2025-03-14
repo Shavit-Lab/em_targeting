@@ -18,7 +18,12 @@ def read_image(path_im):
         with h5py.File(path_im) as f:
             image = f["exported_data"][:]
             image = np.squeeze(image)
-            image = image == 2
+            unq = np.unique(image)
+            if 2 in unq:  #
+                image = image == 2
+            else:
+                print(f"Warning, label 2 not found in {path_im}, using second value")
+                image = image == unq[1]
     else:
         image = Image.open(path_im)
         image = np.array(image)
